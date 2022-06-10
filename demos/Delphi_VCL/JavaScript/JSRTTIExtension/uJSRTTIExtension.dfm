@@ -38,7 +38,7 @@ object JSRTTIExtensionFrm: TJSRTTIExtensionFrm
       Margins.Right = 5
       Align = alClient
       TabOrder = 0
-      Text = 'http://www.google.com'
+      Text = 'http://www.bing.com'
       ExplicitHeight = 21
     end
     object GoBtn: TButton

@@ -10,7 +10,7 @@
 // For more information about CEF4Delphi visit :
 //         https://www.briskbard.com/index.php?lang=en&pageid=cef
 //
-//        Copyright © 2017 Salvador Diaz Fau. All rights reserved.
+//        Copyright ?2017 Salvador Diaz Fau. All rights reserved.
 //
 // ************************************************************************
 // ************ vvvv Original license and comments below vvvv *************
@@ -50,7 +50,7 @@ uses
   Controls, Forms, Dialogs, StdCtrls, ExtCtrls, ComCtrls,
   {$ENDIF}
   uCEFChromium, uCEFWindowParent, uCEFInterfaces, uCEFApplication, uCEFTypes, uCEFConstants,
-  uCEFWinControl;
+  uCEFWinControl, uCEFProcessMessage, uCEFv8Context;
 
 const
   MINIBROWSER_SHOWTEXTVIEWER = WM_APP + $100;
@@ -62,6 +62,7 @@ const
   MOUSEOVER_MESSAGE_NAME        = 'mouseover';
   CUSTOMNAME_MESSAGE_NAME       = 'customname';
   MUTATIONOBSERVER_MESSAGE_NAME = 'mutationobservermsgname';
+  MSG_CefExtension_Callback = 'MSG_CefExtension_Callback';
 
 type
   TJSRTTIExtensionFrm = class(TForm)
@@ -127,6 +128,12 @@ implementation
 uses
   uSimpleTextViewer, uCEFv8Handler, uTestExtension, uCEFMiscFunctions;
 
+type
+  TCefExtension = class(TPersistent)
+  public
+    class procedure postdata(const data: string);
+  end;
+
 // The CEF3 document describing extensions is here :
 // https://bitbucket.org/chromiumembedded/cef/wiki/JavaScriptIntegration.md
 
@@ -157,6 +164,7 @@ begin
   // Registering the extension. Read this document for more details :
   // https://bitbucket.org/chromiumembedded/cef/wiki/JavaScriptIntegration.md
   TCefRTTIExtension.Register('myextension', TTestExtension);
+  TCefRTTIExtension.Register('_host', TCefExtension);
 {$ENDIF}
 end;
 
@@ -165,6 +173,12 @@ begin
   GlobalCEFApp                     := TCefApplication.Create;
   GlobalCEFApp.OnWebKitInitialized := GlobalCEFApp_OnWebKitInitialized;
   GlobalCEFApp.DisableFeatures     := 'NetworkService';
+  //GlobalCEFApp.LocalesDirPath := FBinPath + 'locales';
+  //GlobalCEFApp.CheckDevToolsResources := False;
+  GlobalCEFApp.LocalesRequired := 'en-US,zh-CN,zh-TW';
+  GlobalCEFApp.Locale := 'zh-CN';
+  GlobalCEFApp.AcceptLanguageList := 'zh-CN';
+  GlobalCEFApp.CheckDevToolsResources := False;
 end;
 
 procedure TJSRTTIExtensionFrm.GoBtnClick(Sender: TObject);
@@ -226,6 +240,7 @@ begin
     MINIBROWSER_CONTEXTMENU_JSVISITDOM :
       if (browser <> nil) and (browser.MainFrame <> nil) then
         browser.MainFrame.ExecuteJavaScript(
+          '_host.postdata("test");'+
           'var testhtml = document.body.innerHTML;' +
           'myextension.sendresulttobrowser(testhtml, ' + quotedstr(CUSTOMNAME_MESSAGE_NAME) + ');',  // This is the call from JavaScript to the extension with DELPHI code in uTestExtension.pas
           'about:blank', 0);
@@ -287,7 +302,11 @@ begin
         begin
           StatusBar1.Panels[0].Text := message.ArgumentList.GetString(0);
           Result := True;
-        end;
+        end
+      else if (message.Name = MSG_CefExtension_Callback) then
+      begin
+        showmessage(message.ArgumentList.GetString(0));
+      end;
 end;
 
 procedure TJSRTTIExtensionFrm.FormShow(Sender: TObject);
@@ -371,6 +390,24 @@ end;
 procedure TJSRTTIExtensionFrm.BrowserDestroyMsg(var aMessage : TMessage);
 begin
   CEFWindowParent1.Free;
+end;
+
+{ TCefExtension }
+
+class procedure TCefExtension.postdata(const data: string);
+var
+  msg: ICefProcessMessage;
+begin
+  {with TStringList.Create do
+  try
+    Add('postdata');
+    SaveToFile('c:\documents\log.txt');
+  finally
+    free;
+  end;//}
+  msg := TCefProcessMessageRef.New(MSG_CefExtension_Callback);
+  msg.ArgumentList.SetString(0, data);
+  TCefv8ContextRef.Current.Browser.MainFrame.SendProcessMessage(PID_BROWSER, msg);
 end;
 
 end.
